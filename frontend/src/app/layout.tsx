@@ -4,6 +4,8 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
+import { SocketProvider } from "@/components/SocketProvider";
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -42,10 +44,12 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} min-h-screen bg-background antialiased flex flex-col`}>
         <ThemeProvider>
-          <Navbar />
-          <main className="flex-1">
-            {children}
-          </main>
+          <SocketProvider>
+            <Navbar />
+            <main className="flex-1">
+              {children}
+            </main>
+          </SocketProvider>
         </ThemeProvider>
       </body>
     </html>

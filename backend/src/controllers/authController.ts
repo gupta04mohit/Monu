@@ -13,7 +13,7 @@ const generateToken = (id: string, role: string) => {
 
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
 
     const userExists = await prisma.user.findUnique({ where: { email } });
 
@@ -30,6 +30,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         name,
         email,
         passwordHash,
+        role: role || 'USER',
       },
     });
 
@@ -41,6 +42,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       token: generateToken(user.id, user.role),
     });
   } catch (error) {
+    console.error('Auth Error:', error);
     res.status(500).json({ message: 'Server Error' });
   }
 };
@@ -63,6 +65,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ message: 'Invalid email or password' });
     }
   } catch (error) {
+    console.error('Auth Error:', error);
     res.status(500).json({ message: 'Server Error' });
   }
 };
@@ -86,6 +89,7 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
       res.status(404).json({ message: 'User not found' });
     }
   } catch (error) {
+    console.error('Auth Error:', error);
     res.status(500).json({ message: 'Server Error' });
   }
 };

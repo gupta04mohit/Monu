@@ -57,13 +57,27 @@ export default function Navbar() {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
+    
+    const storedUser = localStorage.getItem("veda_user");
+    if (storedUser) {
+      try { setUser(JSON.parse(storedUser)); } catch (e) {}
+    }
+
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("veda_token");
+    localStorage.removeItem("veda_user");
+    setUser(null);
+    window.location.href = "/";
+  };
 
   return (
     <header
@@ -171,18 +185,40 @@ export default function Navbar() {
               )}
             </AnimatePresence>
           </button>
-          <Link
-            href="/login"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5"
-          >
-            <Sparkles className="w-4 h-4" /> Get Started
-          </Link>
+          
+          {user ? (
+            <div className="flex items-center gap-4 ml-2">
+              <Link href="/dashboard" className="flex items-center gap-2 group">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  {user.name?.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors hidden xl:block">
+                  {user.name}
+                </span>
+              </Link>
+              <button 
+                onClick={handleLogout}
+                className="text-sm font-medium text-muted-foreground hover:text-red-500 transition-colors"
+              >
+                Log out
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5"
+              >
+                <Sparkles className="w-4 h-4" /> Get Started
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile: Theme + Menu buttons */}
@@ -241,8 +277,30 @@ export default function Navbar() {
                 );
               })}
               <div className="flex flex-col gap-3 pt-4 border-t border-border">
-                <Link href="/login" className="text-center py-3 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors">Sign in</Link>
-                <Link href="/register" className="text-center py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">Get Started Free</Link>
+                {user ? (
+                  <>
+                    <Link href="/dashboard" className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                        {user.name?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-foreground">{user.name}</span>
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
+                      </div>
+                    </Link>
+                    <button 
+                      onClick={handleLogout} 
+                      className="text-center py-3 rounded-xl border border-red-500/20 text-red-500 text-sm font-semibold hover:bg-red-500/10 transition-colors"
+                    >
+                      Log out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login" className="text-center py-3 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors">Sign in</Link>
+                    <Link href="/register" className="text-center py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">Get Started Free</Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

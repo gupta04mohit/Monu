@@ -1,35 +1,137 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Video, Mic, MicOff, VideoOff, Phone, MessageSquare, FileText, Clock, User, Loader2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { Video, Mic, MicOff, VideoOff, Phone, MessageSquare, FileText, Clock, User, Loader2, PhoneOutgoing } from "lucide-react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useSocket } from "@/components/SocketProvider";
 
-import { useRouter } from "next/navigation";
-
-export default function TelehealthPage() {
+function TelehealthContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const roomId = searchParams.get("roomId");
+  const callerNameUrl = searchParams.get("callerName");
+  
+  const { socket } = useSocket();
+  const [user, setUser] = useState<any>(null);
+
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [isCalling, setIsCalling] = useState(false);
   const [aiNotes, setAiNotes] = useState<string[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<{ senderName: string; text: string; isSelf?: boolean }[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(roomId);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Simulate Doctor joining
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(() => {
-    const timer = setTimeout(() => {
+    if (chatOpen) scrollToBottom();
+  }, [messages, chatOpen]);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("veda_user");
+    if (storedUser) {
+      try { setUser(JSON.parse(storedUser)); } catch(e) {}
+    }
+  }, []);
+
+  // Keep activeRoomId in sync with URL on mount for the Doctor
+  useEffect(() => {
+    if (roomId && !activeRoomId) setActiveRoomId(roomId);
+  }, [roomId, activeRoomId]);
+
+  // Set connected status based on activeRoomId
+  useEffect(() => {
+    if (activeRoomId && socket) {
+      // Join room instantly
       setConnected(true);
+      socket.emit("join-room", { roomId: activeRoomId });
+      
+      // If socket drops and reconnects, it loses rooms. Re-join!
+      const onConnect = () => {
+        socket.emit("join-room", { roomId: activeRoomId });
+      };
+      socket.on("connect", onConnect);
       
       // Simulate AI notes populating
       setTimeout(() => setAiNotes(prev => [...prev, "Patient reports persistent digestive discomfort after meals."]), 2000);
       setTimeout(() => setAiNotes(prev => [...prev, "SpO2 readings from wearable: <span class='text-green-400 font-semibold'>98% — normal</span>."]), 5000);
       setTimeout(() => setAiNotes(prev => [...prev, "Dosha Profile: <span class='text-orange-400 font-semibold'>Vata-Pitta</span>. Possible Sama Agni issue."]), 8000);
-      
-    }, 4000); // Connects after 4 seconds
 
-    return () => clearTimeout(timer);
-  }, []);
+      return () => {
+        socket.off("connect", onConnect);
+      };
+    }
+  }, [activeRoomId, socket]);
+
+  useEffect(() => {
+    if (socket) {
+      socket.on("call-accepted", (data) => {
+        setIsCalling(false);
+        setConnected(true);
+        setActiveRoomId(data.roomId);
+        router.push(`/telehealth?roomId=${data.roomId}`);
+      });
+
+      socket.on("call-failed", (data) => {
+        setIsCalling(false);
+        alert(data.message);
+      });
+
+      socket.on("call-rejected", () => {
+        setIsCalling(false);
+        alert("The doctor declined the call.");
+      });
+
+      socket.on("receive-message", (data: { senderName: string; text: string }) => {
+        setMessages(prev => [...prev, { senderName: data.senderName, text: data.text, isSelf: false }]);
+      });
+    }
+    return () => {
+      if (socket) {
+        socket.off("call-accepted");
+        socket.off("call-failed");
+        socket.off("call-rejected");
+        socket.off("receive-message");
+      }
+    };
+  }, [socket, router]);
+
+  const initiateCall = () => {
+    if (!user) {
+      alert("Please log in to make a call.");
+      return;
+    }
+    if (socket) {
+      setIsCalling(true);
+      // Calls any other active user for testing
+      socket.emit("initiate-call-test", { callerId: user._id, callerName: user.name });
+    } else {
+      alert("Socket not connected.");
+    }
+  };
+
+  const handleSendMessage = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!newMessage.trim() || !socket || !activeRoomId) return;
+    
+    // Guarantee room membership right before sending
+    socket.emit("join-room", { roomId: activeRoomId });
+    
+    const text = newMessage.trim();
+    socket.emit("send-message", { roomId: activeRoomId, text, senderName: user?.name || "User" });
+    setMessages(prev => [...prev, { senderName: "You", text, isSelf: true }]);
+    setNewMessage("");
+  };
 
   // Initialize camera and mic
   useEffect(() => {
@@ -64,17 +166,21 @@ export default function TelehealthPage() {
   }, [micOn, camOn, stream]);
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col font-sans">
+    <div className="min-h-[calc(100vh-64px)] bg-gray-950 flex flex-col font-sans">
       {/* Top Bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gray-900/50 backdrop-blur-md">
         <div>
-          <h2 className="text-white text-xl font-bold tracking-tight">Consultation with Dr. Anjali Sharma</h2>
-          <p className="text-white/50 text-sm flex items-center gap-1.5 mt-0.5"><Clock className="w-3.5 h-3.5" /> Session active · 12:34 mins</p>
+          <h2 className="text-white text-xl font-bold tracking-tight">
+            Consultation {callerNameUrl ? `with ${callerNameUrl}` : ""}
+          </h2>
+          {connected && <p className="text-white/50 text-sm flex items-center gap-1.5 mt-0.5"><Clock className="w-3.5 h-3.5" /> Session active</p>}
         </div>
-        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(34,197,94,0.1)]">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-          <span className="text-green-400 text-sm font-semibold tracking-wide">Live</span>
-        </div>
+        {connected && (
+          <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(34,197,94,0.1)]">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+            <span className="text-green-400 text-sm font-semibold tracking-wide">Live</span>
+          </div>
+        )}
       </div>
 
       {/* Main Video Area */}
@@ -82,23 +188,50 @@ export default function TelehealthPage() {
         
         {/* Doctor Video Feed (Main) */}
         <div className="lg:col-span-2 relative bg-gray-900 rounded-3xl overflow-hidden border border-white/5 shadow-2xl min-h-[450px] flex items-center justify-center group">
-          {/* Animated Background Gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-50"></div>
           
           {!connected ? (
             <div className="text-center z-10 flex flex-col items-center">
               <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center mb-6 relative">
-                <div className="absolute inset-0 rounded-full border-2 border-primary/30 border-t-primary animate-spin"></div>
+                {isCalling && <div className="absolute inset-0 rounded-full border-2 border-primary/30 border-t-primary animate-spin"></div>}
                 <User className="w-10 h-10 text-white/40" />
               </div>
-              <p className="text-xl text-white font-medium mb-2">Waiting for Dr. Sharma...</p>
-              <p className="text-white/40 text-sm flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Establishing secure P2P connection
-              </p>
+              
+              {user?.role === 'DOCTOR' ? (
+                <>
+                  <p className="text-xl text-white font-medium mb-4">You are online</p>
+                  <p className="text-white/60 mb-6">Waiting for incoming patient consultations...</p>
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <span className="text-sm text-primary font-medium tracking-wide">Listening for calls</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {!isCalling ? (
+                    <>
+                      <p className="text-xl text-white font-medium mb-4">Ready to start the consultation?</p>
+                      <button 
+                        onClick={initiateCall}
+                        className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-full font-bold shadow-lg transition-all hover:scale-105"
+                      >
+                        <PhoneOutgoing className="w-5 h-5" /> Call a Doctor Now
+                      </button>
+                      <p className="mt-4 text-xs text-white/40">This will ring available doctors in the network.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xl text-white font-medium mb-2">Calling Doctor...</p>
+                      <p className="text-white/40 text-sm flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Waiting for them to accept
+                      </p>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <div className="absolute inset-0 w-full h-full bg-gray-900 z-10">
-              {/* Fallback avatar if no video available, but we use a cool animated pulse to look like active audio */}
               <div className="absolute inset-0 flex items-center justify-center flex-col">
                 <div className="relative">
                   <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping"></div>
@@ -106,9 +239,8 @@ export default function TelehealthPage() {
                     <User className="w-16 h-16 text-primary" />
                   </div>
                 </div>
-                <p className="mt-6 text-white text-lg font-medium">Dr. Sharma is speaking...</p>
+                <p className="mt-6 text-white text-lg font-medium">{callerNameUrl || "Doctor"} is speaking...</p>
                 
-                {/* Audio visualizer simulation */}
                 <div className="flex items-center gap-1.5 mt-4">
                   {[...Array(8)].map((_, i) => (
                     <motion.div 
@@ -123,11 +255,12 @@ export default function TelehealthPage() {
             </div>
           )}
           
-          {/* Doctor Name Tag */}
-          <div className="absolute bottom-6 left-6 z-20 bg-black/40 backdrop-blur-md border border-white/10 px-5 py-3 rounded-2xl transition-transform group-hover:scale-105">
-            <p className="text-white font-bold text-lg">Dr. Anjali Sharma</p>
-            <p className="text-primary text-sm font-medium">Ayurvedic Physician {connected && "• Connected"}</p>
-          </div>
+          {connected && (
+            <div className="absolute bottom-6 left-6 z-20 bg-black/40 backdrop-blur-md border border-white/10 px-5 py-3 rounded-2xl transition-transform group-hover:scale-105">
+              <p className="text-white font-bold text-lg">{callerNameUrl || "Doctor"}</p>
+              <p className="text-primary text-sm font-medium">Connected Session</p>
+            </div>
+          )}
         </div>
 
         {/* Right Panel */}
@@ -162,49 +295,102 @@ export default function TelehealthPage() {
             </div>
           </div>
 
-          {/* AI Notes */}
-          <div className="bg-gray-900/80 backdrop-blur-md border border-white/5 rounded-3xl p-6 flex-1 flex flex-col shadow-xl">
-            <h4 className="text-white/90 font-bold uppercase tracking-widest text-xs mb-4 flex items-center gap-2 border-b border-white/10 pb-3">
-              <FileText className="w-4 h-4 text-primary" /> Live AI Session Notes
+          {/* AI Notes & Chat Toggle */}
+          <div className="bg-gray-900/80 backdrop-blur-md border border-white/5 rounded-3xl p-6 flex-1 flex flex-col shadow-xl overflow-hidden">
+            <h4 className="text-white/90 font-bold uppercase tracking-widest text-xs mb-4 flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                {chatOpen ? <MessageSquare className="w-4 h-4 text-primary" /> : <FileText className="w-4 h-4 text-primary" />}
+                {chatOpen ? "Live Chat" : "Live AI Session Notes"}
+              </div>
+              <button 
+                onClick={() => setChatOpen(!chatOpen)}
+                className="text-white/40 hover:text-white transition-colors"
+              >
+                {chatOpen ? "View Notes" : "View Chat"}
+              </button>
             </h4>
-            <div className="space-y-3 text-sm flex-1 overflow-y-auto pr-2 custom-scrollbar">
-              {!connected ? (
-                 <p className="text-white/40 italic text-center mt-10">AI will start taking notes once the consultation begins.</p>
-              ) : (
-                <AnimatePresence>
-                  {aiNotes.map((note, idx) => (
-                    <motion.div 
-                      key={idx}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-white/5 p-3 rounded-xl border border-white/5"
-                    >
-                      <p className="text-white/80 leading-relaxed" dangerouslySetInnerHTML={{__html: note}} />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              )}
-            </div>
             
-            <AnimatePresence>
-              {connected && aiNotes.length >= 3 && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="mt-4 pt-4 border-t border-white/10 bg-primary/10 -mx-6 -mb-6 p-6 rounded-b-3xl border-t-primary/20"
-                >
-                  <p className="text-xs text-primary font-bold tracking-widest mb-3">AI SUGGESTED PRESCRIPTIONS</p>
-                  <ul className="space-y-2">
-                    <motion.li initial={{opacity:0, x:-10}} animate={{opacity:1, x:0}} transition={{delay: 0.2}} className="text-white/90 text-sm flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span> Triphala Churna — 1 tsp with warm water before bed.
-                    </motion.li>
-                    <motion.li initial={{opacity:0, x:-10}} animate={{opacity:1, x:0}} transition={{delay: 0.5}} className="text-white/90 text-sm flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span> Avoid raw, cold salads for 2 weeks to balance Agni.
-                    </motion.li>
-                  </ul>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {chatOpen ? (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 pb-2">
+                  {!connected ? (
+                     <p className="text-white/40 italic text-center mt-10">Chat will be available once connected.</p>
+                  ) : messages.length === 0 ? (
+                     <p className="text-white/40 italic text-center mt-10">No messages yet. Say hello!</p>
+                  ) : (
+                    messages.map((msg, idx) => (
+                      <motion.div 
+                        key={idx}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`flex flex-col ${msg.isSelf ? 'items-end' : 'items-start'}`}
+                      >
+                        <span className="text-[10px] text-white/40 mb-1 px-1">{msg.senderName}</span>
+                        <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm ${msg.isSelf ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-white/10 text-white rounded-tl-sm'}`}>
+                          {msg.text}
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+                {connected && (
+                  <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t border-white/10 flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Type a message..."
+                      className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
+                    />
+                    <button type="submit" disabled={!newMessage.trim()} className="bg-primary text-white p-2.5 rounded-full disabled:opacity-50 transition-all hover:scale-105">
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 text-sm flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                  {!connected ? (
+                     <p className="text-white/40 italic text-center mt-10">AI will start taking notes once the consultation begins.</p>
+                  ) : (
+                    <AnimatePresence>
+                      {aiNotes.map((note, idx) => (
+                        <motion.div 
+                          key={idx}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-white/5 p-3 rounded-xl border border-white/5"
+                        >
+                          <p className="text-white/80 leading-relaxed" dangerouslySetInnerHTML={{__html: note}} />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  )}
+                </div>
+                
+                <AnimatePresence>
+                  {connected && aiNotes.length >= 3 && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      className="mt-4 pt-4 border-t border-white/10 bg-primary/10 -mx-6 -mb-6 p-6 rounded-b-3xl border-t-primary/20"
+                    >
+                      <p className="text-xs text-primary font-bold tracking-widest mb-3">AI SUGGESTED PRESCRIPTIONS</p>
+                      <ul className="space-y-2">
+                        <motion.li initial={{opacity:0, x:-10}} animate={{opacity:1, x:0}} transition={{delay: 0.2}} className="text-white/90 text-sm flex items-start gap-2">
+                          <span className="text-primary mt-0.5">•</span> Triphala Churna — 1 tsp with warm water before bed.
+                        </motion.li>
+                        <motion.li initial={{opacity:0, x:-10}} animate={{opacity:1, x:0}} transition={{delay: 0.5}} className="text-white/90 text-sm flex items-start gap-2">
+                          <span className="text-primary mt-0.5">•</span> Avoid raw, cold salads for 2 weeks to balance Agni.
+                        </motion.li>
+                      </ul>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -232,16 +418,20 @@ export default function TelehealthPage() {
         </motion.button>
 
         <motion.button
+          onClick={() => setChatOpen(!chatOpen)}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="w-16 h-16 rounded-2xl flex items-center justify-center text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all shadow-lg"
+          className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white transition-all shadow-lg ${chatOpen ? 'bg-primary text-primary-foreground border border-primary/50' : 'bg-white/10 hover:bg-white/20 border border-white/10'}`}
           title="Chat"
         >
           <MessageSquare className="w-6 h-6" />
         </motion.button>
 
         <motion.button
-          onClick={() => router.push("/dashboard")}
+          onClick={() => {
+             if (socket && isCalling) socket.emit("reject-call", { callerId: user?._id });
+             router.push("/dashboard");
+          }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="w-24 h-16 rounded-2xl flex items-center justify-center text-white bg-red-600 hover:bg-red-700 transition-all shadow-lg shadow-red-600/20 px-6 ml-4"
@@ -251,5 +441,13 @@ export default function TelehealthPage() {
         </motion.button>
       </div>
     </div>
+  );
+}
+
+export default function TelehealthPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-950 flex items-center justify-center"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>}>
+      <TelehealthContent />
+    </Suspense>
   );
 }

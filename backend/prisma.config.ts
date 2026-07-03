@@ -9,6 +9,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"] || "file:./dev.db",
+    url: process.env["DATABASE_URL"] || "mongodb+srv://gupta04mohit_vedaAi:VedaAI@cluster0.gbv3rs5.mongodb.net/vedaai?appName=Cluster0",
   },
 });

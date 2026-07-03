@@ -135,7 +135,7 @@ export default function MealPlannerPage() {
               <h2 className="text-2xl font-bold border-b border-border pb-4">{selectedDay.day}'s Menu</h2>
               
               <div className="space-y-6">
-                {selectedDay.meals.map((meal, idx) => {
+                {selectedDay.meals.map((meal: any, idx: number) => {
                   const isEaten = eatenMeals.includes(meal.name);
                   
                   return (

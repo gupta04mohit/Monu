@@ -4,16 +4,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
-
-
-
-
 model User {
-  id               String            @id @default(uuid())
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
   email            String            @unique
   passwordHash     String?
   googleId         String?
@@ -29,7 +25,7 @@ model User {
   chatHistory      ChatHistory[]
   mealPlans        MealPlan[]
   gamification     Gamification?
-  familyGroupId    String?
+  familyGroupId    String?           @db.ObjectId
   familyGroup      FamilyGroup?      @relation(fields: [familyGroupId], references: [id])
   wearableDevices  WearableDevice[]
   appointmentsAsPatient Appointment[] @relation("PatientAppointments")
@@ -39,8 +35,8 @@ model User {
 }
 
 model Profile {
-  id               String            @id @default(uuid())
-  userId           String            @unique
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @unique @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   age              Int?
   gender           String?
@@ -54,8 +50,8 @@ model Profile {
 }
 
 model DigitalTwin {
-  id               String            @id @default(uuid())
-  userId           String            @unique
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @unique @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   currentHealthScore Float           @default(100.0)
   sleepScore       Float             @default(100.0)
@@ -67,8 +63,8 @@ model DigitalTwin {
 }
 
 model DoshaAssessment {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   vataScore        Int
   pittaScore       Int
@@ -80,8 +76,8 @@ model DoshaAssessment {
 }
 
 model Symptom {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   symptomsList     String            // Comma separated or JSON
   severity         String
@@ -91,8 +87,8 @@ model Symptom {
 }
 
 model HealthPrediction {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   diseaseName      String
   riskPercentage   Float
@@ -103,8 +99,8 @@ model HealthPrediction {
 }
 
 model Recommendation {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   type             String            // DIET, LIFESTYLE, EXERCISE, MENTAL
   content          String            // JSON payload detailing the recommendation
@@ -113,8 +109,8 @@ model Recommendation {
 }
 
 model MealPlan {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   planType         String            // DAILY, WEEKLY, MONTHLY
   meals            String            // JSON payload of recipes and schedules
@@ -123,8 +119,8 @@ model MealPlan {
 }
 
 model Gamification {
-  id               String            @id @default(uuid())
-  userId           String            @unique
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @unique @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   wellnessPoints   Int               @default(0)
   currentStreak    Int               @default(0)
@@ -135,14 +131,14 @@ model Gamification {
 }
 
 model FamilyGroup {
-  id               String            @id @default(uuid())
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
   name             String
   members          User[]
   createdAt        DateTime          @default(now())
 }
 
 model Herb {
-  id               String            @id @default(uuid())
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
   name             String            @unique
   botanicalName    String?
   benefits         String
@@ -154,8 +150,8 @@ model Herb {
 }
 
 model WellnessLog {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   date             DateTime
   waterIntake      Float?            // Liters
@@ -170,8 +166,8 @@ model WellnessLog {
 }
 
 model ChatHistory {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessionId        String
   role             String            // USER or AI
@@ -184,8 +180,8 @@ model ChatHistory {
 // ==========================================
 
 model WearableDevice {
-  id               String            @id @default(uuid())
-  userId           String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform         String            // e.g., "APPLE_HEALTH", "FITBIT", "GOOGLE_FIT"
   accessToken      String?
@@ -196,8 +192,8 @@ model WearableDevice {
 }
 
 model HealthMetric {
-  id               String            @id @default(uuid())
-  deviceId         String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId         String            @db.ObjectId
   device           WearableDevice    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   metricType       String            // e.g., "HEART_RATE", "SPO2", "STEPS", "SLEEP_QUALITY"
   value            Float
@@ -207,8 +203,8 @@ model HealthMetric {
 }
 
 model DoctorProfile {
-  id               String            @id @default(uuid())
-  userId           String            @unique
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @unique @db.ObjectId
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   specialization   String            // e.g., "Ayurvedic Doctor", "Nutritionist"
   experienceYears  Int
@@ -221,10 +217,10 @@ model DoctorProfile {
 }
 
 model Appointment {
-  id               String            @id @default(uuid())
-  patientId        String
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  patientId        String            @db.ObjectId
   patient          User              @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
-  doctorId         String
+  doctorId         String            @db.ObjectId
   doctor           DoctorProfile     @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
   scheduledAt      DateTime
   status           String            // PENDING, CONFIRMED, COMPLETED, CANCELLED
