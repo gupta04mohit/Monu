@@ -73,7 +73,21 @@ io.on('connection', (socket) => {
   socket.on('join-room', ({ roomId }) => {
     socket.join(roomId);
     console.log(`User ${socket.id} joined room ${roomId}`);
+    socket.to(roomId).emit('user-joined-room', { socketId: socket.id });
   });
+
+  socket.on('webrtc-offer', ({ roomId, offer }) => {
+    socket.to(roomId).emit('webrtc-offer', { offer });
+  });
+
+  socket.on('webrtc-answer', ({ roomId, answer }) => {
+    socket.to(roomId).emit('webrtc-answer', { answer });
+  });
+
+  socket.on('webrtc-ice-candidate', ({ roomId, candidate }) => {
+    socket.to(roomId).emit('webrtc-ice-candidate', { candidate });
+  });
+
 
   socket.on('send-message', ({ roomId, text, senderName }) => {
     console.log(`User ${socket.id} (${senderName}) sending message to room ${roomId}: ${text}`);
